@@ -708,6 +708,11 @@ class BasePrefixCache(ABC, PrefixCacheTrait):
         Return True after taking the row; the caller then releases nothing."""
         return False
 
+    def keeps_kv_row(self, req: Req) -> bool:
+        """Whether releasing ``req`` now leaves its row to a streaming session
+        (`claim_kv_row`), so the release frees none of its memory; takes nothing."""
+        return False
+
     def on_release(self, req: Req, *, checkpointed: bool) -> None:
         """The row is freed and the lock dropped; ``checkpointed`` says whether
         the KV went into the tree first. Drop per-request state kept outside the tree."""

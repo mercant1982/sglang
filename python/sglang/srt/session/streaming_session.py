@@ -177,12 +177,10 @@ class StreamingSession:
         if not _is_streaming(req):
             return False
 
-        from sglang.srt.managers.req_types import FINISH_ABORT
-
         slot = self.borrowed_slot(req)
         assert slot is not None, f"streaming {req.rid=} does not run on its slot"
-        if isinstance(req.finished_reason, FINISH_ABORT):
-            # Hand the record and the tree lock back; the caller releases them.
+        if not self.keeps_row(req):
+            # Aborted: hand the record and the tree lock back; the caller releases them.
             del self.slots[req.session.session_id]
             req.lock, slot.lock = slot.lock, None
             req.release_mm_inputs_on_abort()
@@ -208,6 +206,13 @@ class StreamingSession:
         req.session.finish_req(req)
 
         return True
+
+    def keeps_row(self, req: Req) -> bool:
+        """Whether releasing ``req`` now leaves its row, and the state slots its
+        record holds, to its session (`try_cache_finished_req`): a turn not aborted."""
+        from sglang.srt.managers.req_types import FINISH_ABORT
+
+        return _is_streaming(req) and not isinstance(req.finished_reason, FINISH_ABORT)
 
     def try_checkpoint(self, req: Req, *, up_to: int, **kwargs) -> bool:
         # A turn publishes nothing of its own, except the first prompt: the slot
