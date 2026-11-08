@@ -119,11 +119,6 @@ class SchedulerPPMixin:
 
     @DynamicGradMode()
     def event_loop_pp(self: Scheduler):
-        # FIXME: this loop never applies the write-after-read barrier
-        # (`Scheduler._apply_war_barrier`). Unified memory frees ids and
-        # rewrites request rows on the schedule stream at once and relies on
-        # this barrier, so an in-flight microbatch can read unbound or rebound
-        # mappings.
         """
         A scheduler loop for pipeline parallelism.
         Notes:
@@ -234,6 +229,8 @@ class SchedulerPPMixin:
                         self._pp_send_proxy_to_next_stage(result)
 
                 self.pp_outputs = next_pp_outputs
+                if cur_batch:
+                    self._pp_apply_war_barrier()
 
                 # `self.last_batch` is the one reloaded for this micro-batch, so
                 # pass the batch this iteration launched.
@@ -390,6 +387,8 @@ class SchedulerPPMixin:
 
                 self.pp_outputs = next_pp_outputs
                 release_rids = next_release_rids
+                if cur_batch:
+                    self._pp_apply_war_barrier()
 
                 self.running_batch.batch_is_full = False
 
@@ -592,6 +591,8 @@ class SchedulerPPMixin:
                 release_rids = next_release_rids
                 consensus_retract_rids = next_consensus_retract_rids
                 consensus_prealloc_rids = next_consensus_prealloc_rids
+                if cur_batch:
+                    self._pp_apply_war_barrier()
 
                 self.running_batch.batch_is_full = False
 
@@ -616,6 +617,13 @@ class SchedulerPPMixin:
         unprocessed."""
         has_unprocessed_mb = any(mb is not None for mb in self.mbs)
         return self.ingest_requests(stop_at_pause=has_unprocessed_mb)
+
+    def _pp_apply_war_barrier(self: Scheduler) -> None:
+        """Order later schedule-stream writes after the launched forward's reads; it
+        runs after result processing so a whole-forward wait holds back no output.
+        Processing first is safe: it is another micro-batch's result, and a chunk's
+        frees and checkpoints wait for the next schedule, behind this barrier."""
+        self._apply_war_barrier()
 
     def _pp_retract_microbatches(self: Scheduler) -> None:
         """Retract the requests of every micro-batch, none of them in flight."""
