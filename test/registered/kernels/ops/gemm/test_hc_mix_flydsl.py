@@ -5,6 +5,7 @@ import pytest
 import torch
 
 from sglang.srt.layers.hc_mix_flydsl import (
+    _aiter_hc_mix_available,
     flydsl_hc_mix_supported,
     flydsl_hc_mix_weights_supported,
 )
@@ -21,6 +22,8 @@ pytestmark = pytest.mark.skipif(
 def test_gated_residual_dispatch():
     if torch.cuda.get_device_properties().gcnArchName.split(":")[0] != "gfx950":
         pytest.skip("Requires gfx950")
+    if not _aiter_hc_mix_available():
+        pytest.skip("Installed AITER has no aiter.ops.flydsl.hc_mix (or no FlyDSL)")
     from aiter.ops.flydsl.hc_mix import hc_mix
 
     from sglang.srt.layers.hyperconnection import GatedResidual, HyperConnectionConfig
@@ -71,6 +74,8 @@ def test_gated_residual_dispatch_many_rows(rows):
     # Speculative verify passes carry requests x draft tokens rows.
     if torch.cuda.get_device_properties().gcnArchName.split(":")[0] != "gfx950":
         pytest.skip("Requires gfx950")
+    if not _aiter_hc_mix_available():
+        pytest.skip("Installed AITER has no aiter.ops.flydsl.hc_mix (or no FlyDSL)")
     from aiter.ops.flydsl.hc_mix import hc_mix
 
     from sglang.srt.layers.hyperconnection import GatedResidual, HyperConnectionConfig
